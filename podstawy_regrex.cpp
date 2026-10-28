@@ -60,6 +60,7 @@ string regex::zrob_preprocessing(string re) const {
         if (pozycja_klamry == 0) {
             throw invalid_argument("Niepoprawne wyrazenie: klamra na początku");
         }
+    ///lll
 
         int poczatek_elementu = pozycja_klamry - 1;
         // jeśli przed klamrą jest nawias zamykający, to szukamy odpowiadającego mu nawiasu otwierającego
