@@ -6,8 +6,13 @@
 #include <algorithm>
 
 using namespace std;
-
-
+// słówko static nadaje łączenie wewnętrzne co ogranicza widoczność tej funkci do pliku źródłowego
+static bool czy_liczba(const string& s)
+{
+    if (s.empty()) return false;
+    for (char c : s) if (c < '0' || c > '9') return false;
+    return true; 
+}
 
 string regex::zrob_preprocessing(string re) const {
    
@@ -46,86 +51,51 @@ string regex::zrob_preprocessing(string re) const {
     re = wynik;
 
 
-    
-    size_t pozycja_klamry = re.find('{');
-    while (pozycja_klamry != string::npos) 
+size_t pozycja_klamry_otwieracej= re.find('{');
+    while (pozycja_klamry_otwieracej != string::npos)
     {
-        size_t pozycja_zamkniecia = re.find('}', pozycja_klamry);
-        if (pozycja_zamkniecia == string::npos) {
-            throw invalid_argument("Niepoprawne wyrazenie: brak zamykajacej klamry");
-        }
-// funkcja substr() zwraca podciąg znaków z łańcucha re (pierwszy argument to skąd zaczyna się podciąg, a drugi argument to ile znaków ma być w podciągu)
-        string liczba_parametrow = re.substr(pozycja_klamry + 1, pozycja_zamkniecia - pozycja_klamry - 1);
-//klamra nie moze być na początku wyrażenia
-        if (pozycja_klamry == 0) {
-            throw invalid_argument("Niepoprawne wyrazenie: klamra na początku");
-        }
-    ///lll
+        size_t pozycja_klamry_zamykajacej = re.find('}', pozycja_klamry_otwieracej);
+        // (od_którego_indeksu, ile_znaków)
+        string parametry = re.substr(pozycja_klamry_otwieracej+ 1, pozycja_klamry_zamykajacej - pozycja_klamry_otwieracej - 1);
 
-        int poczatek_elementu = pozycja_klamry - 1;
-        // jeśli przed klamrą jest nawias zamykający, to szukamy odpowiadającego mu nawiasu otwierającego
-
-        if (re[poczatek_elementu] == ')') 
+        // szukamy początku elementu przed klamrą // start element do powtórzenia np a 
+        size_t start = pozycja_klamry_otwieracej - 1;
+        if (re[start] == ')')
         {
-            int licznik_nawiasow = 1;
-            poczatek_elementu--;
-            while (poczatek_elementu >= 0 && licznik_nawiasow > 0) 
+            int licznik = 1;
+            while (licznik > 0)
             {
-                if (re[poczatek_elementu] == ')') licznik_nawiasow++;
-                else if (re[poczatek_elementu] == '(') licznik_nawiasow--;
-                
-                if (licznik_nawiasow > 0) poczatek_elementu--;
-            }
-            if (licznik_nawiasow != 0) 
-            {
-                throw invalid_argument("Niepoprawne wyrazenie: brak odpowiadającego nawiasu otwierającego");
+                start--;
+                if (re[start] == ')') licznik++;
+                if (re[start] == '(') licznik--;
             }
         }
+        string element = re.substr(start, pozycja_klamry_otwieracej - start);
 
-        string element = re.substr(poczatek_elementu, pozycja_klamry - poczatek_elementu);
+        int min = stoi(parametry);
         string nowy_tekst = "";
-        size_t pozycja_przecinka = liczba_parametrow.find(',');
+        for (int i = 0; i < min; i++)
+            nowy_tekst += element;
 
-        try {
-            if (pozycja_przecinka != string::npos) 
+        size_t przecinek = parametry.find(',');
+        if (przecinek != string::npos)
+        {
+            if (przecinek + 1 == parametry.size())      
             {
-                // jeśli nie ma przecinka, to jest to dokładnie jedno powtórzenie
-                int min_powtorzen = stoi(liczba_parametrow.substr(0, pozycja_przecinka));
-                int max_powtorzen = -1;
-
-                if (pozycja_przecinka + 1 < liczba_parametrow.length()) 
-                {
-                    max_powtorzen = stoi(liczba_parametrow.substr(pozycja_przecinka + 1));
-                }
-
-                for (int i = 0; i < min_powtorzen; i++) {
-                    nowy_tekst += element;
-                }
-
-                if (max_powtorzen == -1) {
-                    nowy_tekst += element + "*";
-                } else {
-                    for (int i = min_powtorzen; i < max_powtorzen; i++) {
-                        nowy_tekst += element + "?";
-                    }
-                }
-            } 
-            else 
-            {
-                int ilosc_powtorzen = stoi(liczba_parametrow);
-                for (int i = 0; i < ilosc_powtorzen; i++) {
-                    nowy_tekst += element;
-                }
+                nowy_tekst += element + "*";
             }
-        } catch (const std::exception& e) {
-            throw invalid_argument("Niepoprawne wyrazenie: nieobsługiwany format klamry");
+            else                                       
+            {
+                int max = stoi(parametry.substr(przecinek + 1));
+                for (int i = min; i < max; i++)
+                    nowy_tekst += element + "?";
+            }
         }
 
-        int dlugosc_do_zamiany = pozycja_zamkniecia - poczatek_elementu + 1;
-        re.replace(poczatek_elementu, dlugosc_do_zamiany, nowy_tekst);
-        pozycja_klamry = re.find('{');
+        re.replace(start, pozycja_klamry_zamykajacej - start + 1, nowy_tekst);
+        pozycja_klamry_otwieracej = re.find('{');
     }
-    
+
     return "(" + re + ")"; 
 }
 
