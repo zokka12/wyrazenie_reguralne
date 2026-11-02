@@ -7,11 +7,28 @@
 
 using namespace std;
 // słówko static nadaje łączenie wewnętrzne co ogranicza widoczność tej funkci do pliku źródłowego
-static bool czy_liczba(const string& s)
-{
+// mamy {a1,}; {,9}
+static bool czy_liczba(const string& s) {
     if (s.empty()) return false;
-    for (char c : s) if (c < '0' || c > '9') return false;
+    // po kolei każdy znak c z napisu s
+    for (char c : s) 
+        if (c < '0' || c > '9') return false;
     return true; 
+}
+static int safe_stoi (const string& s) {
+    int wartosc;
+    try{
+        wartosc = stoi(s);
+    }
+    catch (const exception&) { 
+        throw invalid_argument("Niepoprawna liczba w klamrze" ); 
+    }
+    if (wartosc > 10000) {
+        throw invalid_argument("Liczba w klamrze przekracza bezpieczny limit powtorzen (max 10000)" );
+    }
+    
+    return wartosc;
+
 }
 
 string regex::zrob_preprocessing(string re) const {
@@ -56,10 +73,35 @@ size_t pozycja_klamry_otwieracej= re.find('{');
     {
         size_t pozycja_klamry_zamykajacej = re.find('}', pozycja_klamry_otwieracej);
         // (od_którego_indeksu, ile_znaków)
+
+        // jeśli nie znaleziono zamykającej klamry, rzucamy wyjątek
+        if (pozycja_klamry_zamykajacej == string::npos) 
+        {
+            throw invalid_argument("Brak zamykajacej klamry '}'");
+        }
+        // jeśli klamra otwierająca jest na początku wyrażenia, rzucamy wyjątek
+        if (pozycja_klamry_otwieracej == 0) 
+        {
+            throw invalid_argument("Klamra na poczatku wyrazenia - brak elementu do powtorzenia");
+        }
         string parametry = re.substr(pozycja_klamry_otwieracej+ 1, pozycja_klamry_zamykajacej - pozycja_klamry_otwieracej - 1);
+
+        if (parametry.empty()) 
+        {
+            throw invalid_argument("Puste klamry");
+        }
 
         // szukamy początku elementu przed klamrą // start element do powtórzenia np a 
         size_t start = pozycja_klamry_otwieracej - 1;
+        char poprzedzajacy = re[start];
+        if (poprzedzajacy == '*' || poprzedzajacy == '+' || poprzedzajacy == '?' || 
+            poprzedzajacy == '(' || poprzedzajacy == '|' || poprzedzajacy == '^' || 
+            poprzedzajacy == '$') 
+        {
+            throw invalid_argument("Brak poprawnego elementu do powtorzenia przed klamra");
+        }
+
+
         if (re[start] == ')')
         {
             int licznik = 1;
@@ -72,12 +114,40 @@ size_t pozycja_klamry_otwieracej= re.find('{');
         }
         string element = re.substr(start, pozycja_klamry_otwieracej - start);
 
-        int min = stoi(parametry);
+
+
+        size_t przecinek = parametry.find(',');
+        int min = 0;
+// zabezpiecza to by w klamrach nie było liter
+        if (przecinek == string::npos)
+            {
+                if(!czy_liczba(parametry)) 
+                    throw invalid_argument("W klamrze jest litera");
+                
+                min = safe_stoi(parametry);
+                
+            }
+        else
+            {
+            string przed = parametry.substr(0, przecinek);
+            string po = parametry.substr(przecinek + 1);
+
+            if (!przed.empty() && !czy_liczba(przed))
+                throw invalid_argument("zle minimum w klamrze");
+            if (!po.empty() && !czy_liczba(po))
+                throw invalid_argument("zle maksimum w klamrze");
+            if (!przed.empty()){
+                min = safe_stoi(przed);
+            }
+        }
+
+
+        //int min = stoi(parametry);
         string nowy_tekst = "";
         for (int i = 0; i < min; i++)
             nowy_tekst += element;
 
-        size_t przecinek = parametry.find(',');
+
         if (przecinek != string::npos)
         {
             if (przecinek + 1 == parametry.size())      
@@ -86,13 +156,19 @@ size_t pozycja_klamry_otwieracej= re.find('{');
             }
             else                                       
             {
-                int max = stoi(parametry.substr(przecinek + 1));
+                int max = safe_stoi(parametry.substr(przecinek + 1));
+                // sprawdzamy czy min nie jest większe od max
+                if (min > max) 
+                {
+                    throw invalid_argument("Nielogiczny przedzial w klamrze: min > max");
+                }
                 for (int i = min; i < max; i++)
                     nowy_tekst += element + "?";
             }
         }
-
+//(od_którego_indeksu, ile_znaków_wyciąć, czym_zastąpić)
         re.replace(start, pozycja_klamry_zamykajacej - start + 1, nowy_tekst);
+
         pozycja_klamry_otwieracej = re.find('{');
     }
 
@@ -113,7 +189,7 @@ regex::regex(const string& raw_re) {
         }
     }
     if (zbalansowanie != 0) throw invalid_argument("Niezbalansowane nawiasy");
-    
+    // \s, \d,\w - jak budować maszyne, 
     wzorzec = zrob_preprocessing(raw_re);
     dlugosc_wzorca = wzorzec.length();
     // +1 tworzy ostateczny stan sukcesu, do którego automat wskakuje po przeczytaniu ostatniej litery
