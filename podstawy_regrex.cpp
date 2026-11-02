@@ -4,6 +4,7 @@
 #include <stack>
 #include <stdexcept>
 #include <algorithm>
+#include <cctype>
 
 using namespace std;
 // słówko static nadaje łączenie wewnętrzne co ogranicza widoczność tej funkci do pliku źródłowego
@@ -15,6 +16,7 @@ static bool czy_liczba(const string& s) {
         if (c < '0' || c > '9') return false;
     return true; 
 }
+
 static int safe_stoi (const string& s) {
     int wartosc;
     try{
@@ -63,6 +65,9 @@ string regex::zrob_preprocessing(string re) const {
             wynik += c; // przepisuje znak bez zmian
         }
     }
+    if (w_kwasnych) {
+        throw invalid_argument("Brak zamykającego nawiasu kwadratowego ']'");
+    }
 
     // Przypisujemy przetworzony ciąg z [ab] -> (a|b) z powrotem do re
     re = wynik;
@@ -79,27 +84,37 @@ size_t pozycja_klamry_otwieracej= re.find('{');
         {
             throw invalid_argument("Brak zamykajacej klamry '}'");
         }
+
+        if (pozycja_klamry_zamykajacej + 1 < re.length()) {
+            char nxt = re[pozycja_klamry_zamykajacej + 1];
+            if (nxt == '{' || nxt == '*' || nxt == '+' || nxt == '?') {
+                throw invalid_argument("Niedozwolona sekwencja kwantyfikatorow po klamrze ");
+            }
+        }
         // jeśli klamra otwierająca jest na początku wyrażenia, rzucamy wyjątek
         if (pozycja_klamry_otwieracej == 0) 
         {
             throw invalid_argument("Klamra na poczatku wyrazenia - brak elementu do powtorzenia");
         }
+
+         // szukamy początku elementu przed klamrą // start element do powtórzenia np a 
+        size_t start = pozycja_klamry_otwieracej - 1;
+        char poprzedzajacy = re[start];
+        if (poprzedzajacy == '*' || poprzedzajacy == '+' || poprzedzajacy == '?' || 
+            poprzedzajacy == '(' || poprzedzajacy == '|' ) 
+        {
+            throw invalid_argument("Brak poprawnego elementu do powtorzenia przed klamra");
+        }
+
+
         string parametry = re.substr(pozycja_klamry_otwieracej+ 1, pozycja_klamry_zamykajacej - pozycja_klamry_otwieracej - 1);
 
         if (parametry.empty()) 
         {
-            throw invalid_argument("Puste klamry");
+            throw invalid_argument("Klamra nie może byc pusta");
         }
 
         // szukamy początku elementu przed klamrą // start element do powtórzenia np a 
-        size_t start = pozycja_klamry_otwieracej - 1;
-        char poprzedzajacy = re[start];
-        if (poprzedzajacy == '*' || poprzedzajacy == '+' || poprzedzajacy == '?' || 
-            poprzedzajacy == '(' || poprzedzajacy == '|' || poprzedzajacy == '^' || 
-            poprzedzajacy == '$') 
-        {
-            throw invalid_argument("Brak poprawnego elementu do powtorzenia przed klamra");
-        }
 
 
         if (re[start] == ')')
@@ -107,6 +122,10 @@ size_t pozycja_klamry_otwieracej= re.find('{');
             int licznik = 1;
             while (licznik > 0)
             {
+                if (start == 0) 
+                {
+                    throw invalid_argument("Niezbalansowane nawiasy");
+                }
                 start--;
                 if (re[start] == ')') licznik++;
                 if (re[start] == '(') licznik--;
@@ -114,21 +133,17 @@ size_t pozycja_klamry_otwieracej= re.find('{');
         }
         string element = re.substr(start, pozycja_klamry_otwieracej - start);
 
-
-
         size_t przecinek = parametry.find(',');
         int min = 0;
-// zabezpiecza to by w klamrach nie było liter
+        // zabezpiecza to by w klamrach nie było liter
         if (przecinek == string::npos)
             {
                 if(!czy_liczba(parametry)) 
                     throw invalid_argument("W klamrze jest litera");
                 
                 min = safe_stoi(parametry);
-                
             }
-        else
-            {
+        else {
             string przed = parametry.substr(0, przecinek);
             string po = parametry.substr(przecinek + 1);
 
@@ -140,18 +155,13 @@ size_t pozycja_klamry_otwieracej= re.find('{');
                 min = safe_stoi(przed);
             }
         }
-
-
         //int min = stoi(parametry);
         string nowy_tekst = "";
         for (int i = 0; i < min; i++)
             nowy_tekst += element;
 
-
-        if (przecinek != string::npos)
-        {
-            if (przecinek + 1 == parametry.size())      
-            {
+        if (przecinek != string::npos) {
+            if (przecinek + 1 == parametry.size()) {
                 nowy_tekst += element + "*";
             }
             else                                       
@@ -166,7 +176,11 @@ size_t pozycja_klamry_otwieracej= re.find('{');
                     nowy_tekst += element + "?";
             }
         }
-//(od_którego_indeksu, ile_znaków_wyciąć, czym_zastąpić)
+        //gdy wynik rozwinięcia jest pusty
+        if(nowy_tekst.empty()){
+            nowy_tekst = "()"; // dodajemy pusty nawias, aby zachować poprawną składnię
+        }
+        //(od_którego_indeksu, ile_znaków_wyciąć, czym_zastąpić)
         re.replace(start, pozycja_klamry_zamykajacej - start + 1, nowy_tekst);
 
         pozycja_klamry_otwieracej = re.find('{');
@@ -284,6 +298,10 @@ regex::regex(const string& raw_re) {
             
             }
         }
+    }
+    // sprawdzamy, czy stos operatorów jest pusty po przetworzeniu całego wyrażenia czyli w sytuacji, gdy wszystkie nawiasy i alternatywy zostały poprawnie zamknięte
+    if (!stos_operatorow.empty()) {
+        throw invalid_argument("Niezbalansowane nawiasy");
     }
 }
 
