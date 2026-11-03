@@ -234,6 +234,7 @@ size_t pozycja_klamry_otwieracej= re.find('{');
     return "(" + re + ")"; 
 }
 
+
 //{} ->  możemy zamienić na ? , trzeba brać pod uwage nawiasy 
 // (a|b)  równoważne [ab]
 regex::regex(const string& raw_re) {
