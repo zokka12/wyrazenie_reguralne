@@ -30,7 +30,7 @@ static int safe_stoi (const string& s) {
     }
     return wartosc;
 }
-
+//tabulacja 07 przejście na dwubajtowe kody, 
 static bool czy_pasuje_do_klasy(char wzorzec_znak, char tekst_znak) {
     if (wzorzec_znak == '\x01') return isdigit(tekst_znak); // \d - cyfra
     else if (wzorzec_znak == '\x02') return isalnum(tekst_znak) || tekst_znak == '_'; // \w - znak słowny
@@ -52,10 +52,28 @@ static bool czy_pasuje_do_klasy(char wzorzec_znak, char tekst_znak) {
 }
 
 string regex::zrob_preprocessing(string re) const {
+    // Sprawdzanie poprawności nawiasów w wyrażeniu regularnym tutaj zamiast w regrex zanim wrzucimy w nawiasy
+    int bilans = 0;
+    bool w_kwasnych_walidacja = false;
+    for (size_t i = 0; i < re.length(); i++) {
+        if (re[i] == '\\') { i++; continue; } // pomija sprawdzanie znaków ucieczki
+        if (re[i] == '[') w_kwasnych_walidacja = true;
+        else if (re[i] == ']') w_kwasnych_walidacja = false;
+    
+        if (!w_kwasnych_walidacja) {
+            if (re[i] == '(') bilans++;
+            else if (re[i] == ')') {
+                bilans--;
+                if (bilans < 0) throw invalid_argument("Niezbalansowane nawiasy");
+            }
+        }
+    }
+    if (bilans != 0) throw invalid_argument("Niezbalansowane nawiasy");    
     string po_ucieczkach = ""; // tworzymy pusty string, do którego będziemy dopisywać kolejne znaki z re po przetworzeniu ucieczek
 
     for (size_t i = 0; i < re.length(); i++) {
-        if (re[i] == '\\' && i + 1 < re.length()) {
+        if (re[i] == '\\' ) {
+            if ( i + 1 < re.length()){
             char nast = re[i + 1]; // sprawdzamy znak po slashu
             if (nast == 'd') po_ucieczkach += '\x01'; // zamieniamy \d na znak specjalny \x01
             else if (nast == 'w') po_ucieczkach += '\x02'; // zamieniamy \w na znak specjalny \x02
@@ -73,7 +91,11 @@ string regex::zrob_preprocessing(string re) const {
             else if (nast == '}') po_ucieczkach += '\x0E';
             else if (nast == '\\') po_ucieczkach += '\x0F';
             else po_ucieczkach += nast; // zachowanie dla np. \. lub \*
-            i++; // pomijamy znak po slashu
+            i++;
+            }else {
+        throw invalid_argument("Samotny ukosnik na koncu wyrazenia");
+    }
+        // pomijamy znak po slashu
         } else {
             po_ucieczkach += re[i];
         }
@@ -241,15 +263,6 @@ regex::regex(const string& raw_re) {
         // \s, \d,\w - jak budować maszyne, 
     wzorzec = zrob_preprocessing(raw_re);
 
-    int zbalansowanie = 0;
-    for (char c : wzorzec) {
-        if (c == '(') zbalansowanie++;
-        else if (c == ')') {
-            zbalansowanie--;
-            if (zbalansowanie < 0) throw invalid_argument("Niezbalansowane nawiasy");
-        }
-    }
-    if (zbalansowanie != 0) throw invalid_argument("Niezbalansowane nawiasy");
     dlugosc_wzorca = wzorzec.length();
     // +1 tworzy ostateczny stan sukcesu, do którego automat wskakuje po przeczytaniu ostatniej litery
     darmowe_przejscia.resize(dlugosc_wzorca + 1);
@@ -263,10 +276,17 @@ regex::regex(const string& raw_re) {
         int lewy_nawias = i;
         char znak = wzorzec[i]; 
 
+        if (znak == '|') {
+            if (i == 0 || wzorzec[i-1] == '(' || wzorzec[i-1] == '|') throw invalid_argument("Pusta alternatywa");
+        }
+        if (znak == ')') {
+            if (wzorzec[i-1] == '(' || wzorzec[i-1] == '|') throw invalid_argument("Pusta grupa wewnatrz nawiasow");
+        }
+
         if (znak == '*' || znak == '+' || znak == '?') {
         // Jeśli operator jest na samej pierwszej pozycji (i == 0)
         // lub bezpośrednio po znaku, którego nie da się powtórzyć
-        if (i == 0 || wzorzec[i - 1] == '(' || wzorzec[i - 1] == '|') {
+        if (i == 0 || wzorzec[i - 1] == '(' || wzorzec[i - 1] == '|' || wzorzec[i - 1] == '*' || wzorzec[i - 1] == '+' || wzorzec[i - 1] == '?') {
             throw invalid_argument("Niepoprawne wyrazenie");
             }
         }

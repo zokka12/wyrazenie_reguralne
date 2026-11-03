@@ -10,11 +10,6 @@ private:
 
     // vector odpowiadający za przechowywanie NFA, każdy indeks przechowuje listę, do której można przejść za pomocą pustego przejścia 
     std::vector<std::vector<int>> darmowe_przejscia;
-    
-    // tablice do obsługi klas dopasowania
-    //std::vector<bool> czy_jest_ucieczka; 
-    //std::vector<std::string> klasa_dopasowania;
-    //std::vector<bool> jest_negacja;
 
     // przeszukiwanie w głąb w wersji iteracyjnej
     void oznacz_osiagalne_stany(int start_stan, std::vector<bool>& odwiedzone_stany) const;
