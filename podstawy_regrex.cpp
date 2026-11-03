@@ -28,12 +28,57 @@ static int safe_stoi (const string& s) {
     if (wartosc > 10000) {
         throw invalid_argument("Liczba w klamrze przekracza bezpieczny limit powtorzen (max 10000)" );
     }
-    
     return wartosc;
+}
 
+static bool czy_pasuje_do_klasy(char wzorzec_znak, char tekst_znak) {
+    if (wzorzec_znak == '\x01') return isdigit(tekst_znak); // \d - cyfra
+    else if (wzorzec_znak == '\x02') return isalnum(tekst_znak) || tekst_znak == '_'; // \w - znak słowny
+    else if (wzorzec_znak == '\x03') return isspace(tekst_znak); // \s - znak biały
+    else if (wzorzec_znak == '\x04') return tekst_znak == '.';
+    else if (wzorzec_znak == '\x05') return tekst_znak == '*';
+    else if (wzorzec_znak == '\x06') return tekst_znak == '+';
+    else if (wzorzec_znak == '\x07') return tekst_znak == '?';
+    else if (wzorzec_znak == '\x08') return tekst_znak == '(';
+    else if (wzorzec_znak == '\x09') return tekst_znak == ')';
+    else if (wzorzec_znak == '\x0A') return tekst_znak == '|';
+    else if (wzorzec_znak == '\x0B') return tekst_znak == '[';
+    else if (wzorzec_znak == '\x0C') return tekst_znak == ']';
+    else if (wzorzec_znak == '\x0D') return tekst_znak == '{';
+    else if (wzorzec_znak == '\x0E') return tekst_znak == '}';
+    else if (wzorzec_znak == '\x0F') return tekst_znak == '\\';
+    else if (wzorzec_znak == '.') return true; // dowolny znak
+    return wzorzec_znak == tekst_znak;
 }
 
 string regex::zrob_preprocessing(string re) const {
+    string po_ucieczkach = ""; // tworzymy pusty string, do którego będziemy dopisywać kolejne znaki z re po przetworzeniu ucieczek
+
+    for (size_t i = 0; i < re.length(); i++) {
+        if (re[i] == '\\' && i + 1 < re.length()) {
+            char nast = re[i + 1]; // sprawdzamy znak po slashu
+            if (nast == 'd') po_ucieczkach += '\x01'; // zamieniamy \d na znak specjalny \x01
+            else if (nast == 'w') po_ucieczkach += '\x02'; // zamieniamy \w na znak specjalny \x02
+            else if (nast == 's') po_ucieczkach += '\x03'; // zamieniamy \s na znak specjalny \x03
+            else if (nast == '.') po_ucieczkach += '\x04';
+            else if (nast == '*') po_ucieczkach += '\x05';
+            else if (nast == '+') po_ucieczkach += '\x06';
+            else if (nast == '?') po_ucieczkach += '\x07';
+            else if (nast == '(') po_ucieczkach += '\x08';
+            else if (nast == ')') po_ucieczkach += '\x09';
+            else if (nast == '|') po_ucieczkach += '\x0A';
+            else if (nast == '[') po_ucieczkach += '\x0B';
+            else if (nast == ']') po_ucieczkach += '\x0C';
+            else if (nast == '{') po_ucieczkach += '\x0D';
+            else if (nast == '}') po_ucieczkach += '\x0E';
+            else if (nast == '\\') po_ucieczkach += '\x0F';
+            else po_ucieczkach += nast; // zachowanie dla np. \. lub \*
+            i++; // pomijamy znak po slashu
+        } else {
+            po_ucieczkach += re[i];
+        }
+    }
+    re = po_ucieczkach; // Podmiana łańcucha przed jego dalszą rozbudową
    
     string wynik = ""; // tworzymy pusty schowek (string) do niego będziemy powoli dopisywać nasz nowy przerobiony wzorzec
     bool w_kwasnych = false; // tworzymy flagę do sprawdzania czy jesteśmy w nawiasach kwadratowych
@@ -192,10 +237,11 @@ size_t pozycja_klamry_otwieracej= re.find('{');
 //{} ->  możemy zamienić na ? , trzeba brać pod uwage nawiasy 
 // (a|b)  równoważne [ab]
 regex::regex(const string& raw_re) {
-    
+        // \s, \d,\w - jak budować maszyne, 
+    wzorzec = zrob_preprocessing(raw_re);
 
     int zbalansowanie = 0;
-    for (char c : raw_re) {
+    for (char c : wzorzec) {
         if (c == '(') zbalansowanie++;
         else if (c == ')') {
             zbalansowanie--;
@@ -203,8 +249,6 @@ regex::regex(const string& raw_re) {
         }
     }
     if (zbalansowanie != 0) throw invalid_argument("Niezbalansowane nawiasy");
-    // \s, \d,\w - jak budować maszyne, 
-    wzorzec = zrob_preprocessing(raw_re);
     dlugosc_wzorca = wzorzec.length();
     // +1 tworzy ostateczny stan sukcesu, do którego automat wskakuje po przeczytaniu ostatniej litery
     darmowe_przejscia.resize(dlugosc_wzorca + 1);
@@ -315,13 +359,13 @@ bool regex::matches(const string& tekst) const {
         vector<int> dopasowane_stany; // żeby do konsoli z zrzucać vector za pomocą pętli for 
 
         // tutaj wypisywać na konsoli zawarttoąś struktury aktywne_stany, żeby zobaczyć, które stany są dopasowane po wczytaniu każdej litery
-        cout << "Aktualnie aktywne stany po wczytaniu litery " << tekst[i] << ": ";
-        for (int j = 0; j <= dlugosc_wzorca; j++) {
-            if (aktywne_stany[j]) {
-                cout << j << " ";
-            }
-        }
-        cout << endl;
+        //cout << "Aktualnie aktywne stany po wczytaniu litery " << tekst[i] << ": ";
+        //for (int j = 0; j <= dlugosc_wzorca; j++) {
+            //if (aktywne_stany[j]) {
+                //cout << j << " ";
+            //}
+        //}
+        //cout << endl;
 
         
         // v to poprostu indeks, iterujemy po indeksie, dług wzorca to wszystkie ineksy + stan sukcesu wiec niech sie wtedy zatszyma i tak po wszystkich indeksach
@@ -335,18 +379,18 @@ bool regex::matches(const string& tekst) const {
             //if (aktywne_stany[v]) {
                 // Jeśli znak w wyrażeniu regularnym pasuje do wczytanej litery lub jest kropką ('.'), dodajemy stan v+1 do dopasowanych stanów
                 // tak jak robiliśmy na tablicy i wypisywaliśmy {0,1,2,3,4,5,6,7,8,9} i tak dalej
-                if (r == tekst[i] || r == '.') {
+                if (czy_pasuje_do_klasy(r, tekst[i])) {
                     dopasowane_stany.push_back(v + 1);
                 }
             }
         }
 
         // tutaj wypisywać na konsoli zawarttoąś struktury dopasowane_stany, żeby zobaczyć, które stany są dopasowane po wczytaniu każdej litery
-        cout << "Dopasowane stany po wczytaniu litery " << tekst[i] << ": ";
-        for (int stan : dopasowane_stany) {
-            cout << stan << " ";
-        }
-        cout << endl;
+        //cout << "Dopasowane stany po wczytaniu litery " << tekst[i] << ": ";
+        //for (int stan : dopasowane_stany) {
+            //cout << stan << " ";
+        //}
+        //cout << endl;
 
         // Po wczytaniu litery, sprawdzamy, które stany są osiągalne z dopasowanych stanów
         fill(aktywne_stany.begin(), aktywne_stany.end(), false);
